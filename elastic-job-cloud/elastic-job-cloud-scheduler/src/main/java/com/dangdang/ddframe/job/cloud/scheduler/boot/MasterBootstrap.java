@@ -22,9 +22,7 @@ import com.dangdang.ddframe.job.cloud.scheduler.boot.env.MesosConfiguration;
 import com.dangdang.ddframe.job.cloud.scheduler.config.CloudJobConfigurationListener;
 import com.dangdang.ddframe.job.cloud.scheduler.config.ConfigurationNode;
 import com.dangdang.ddframe.job.cloud.scheduler.mesos.FacadeService;
-import com.dangdang.ddframe.job.cloud.scheduler.mesos.LeasesQueue;
 import com.dangdang.ddframe.job.cloud.scheduler.mesos.SchedulerEngine;
-import com.dangdang.ddframe.job.cloud.scheduler.mesos.TaskLaunchProcessor;
 import com.dangdang.ddframe.job.cloud.scheduler.producer.ProducerManager;
 import com.dangdang.ddframe.job.cloud.scheduler.producer.ProducerManagerFactory;
 import com.dangdang.ddframe.job.cloud.scheduler.restful.CloudJobRestfulApi;
@@ -59,16 +57,14 @@ public final class MasterBootstrap {
     public MasterBootstrap() {
         env = BootstrapEnvironment.getInstance();
         regCenter = getRegistryCenter();
-        LeasesQueue leasesQueue = new LeasesQueue();
         final FacadeService facadeService = new FacadeService(regCenter);
         TaskScheduler taskScheduler = getTaskScheduler();
-        schedulerDriver = getSchedulerDriver(leasesQueue, taskScheduler, facadeService);
+        schedulerDriver = getSchedulerDriver(taskScheduler, facadeService);
         restfulServer = new RestfulServer(env.getRestfulServerConfiguration().getPort());
         CloudJobRestfulApi.init(schedulerDriver, regCenter);
         initListener();
         final ProducerManager producerManager = ProducerManagerFactory.getInstance(schedulerDriver, regCenter);
         producerManager.startup();
-        new Thread(new TaskLaunchProcessor(leasesQueue, schedulerDriver, taskScheduler, facadeService)).start();
         Runtime.getRuntime().addShutdownHook(new Thread() {
             
             @Override
@@ -85,11 +81,11 @@ public final class MasterBootstrap {
         return result;
     }
     
-    private SchedulerDriver getSchedulerDriver(final LeasesQueue leasesQueue, final TaskScheduler taskScheduler, final FacadeService facadeService) {
+    private SchedulerDriver getSchedulerDriver(final TaskScheduler taskScheduler, final FacadeService facadeService) {
         MesosConfiguration mesosConfig = env.getMesosConfiguration();
         Protos.FrameworkInfo frameworkInfo = 
                 Protos.FrameworkInfo.newBuilder().setUser(mesosConfig.getUser()).setName(MesosConfiguration.FRAMEWORK_NAME).setHostname(mesosConfig.getHostname()).build();
-        return new MesosSchedulerDriver(new SchedulerEngine(leasesQueue, taskScheduler, facadeService), frameworkInfo, mesosConfig.getUrl());
+        return new MesosSchedulerDriver(new SchedulerEngine(taskScheduler, facadeService), frameworkInfo, mesosConfig.getUrl());
     }
     
     private TaskScheduler getTaskScheduler() {
